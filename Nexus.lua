@@ -438,7 +438,6 @@ function NexusUI:CreateWindow(cfg)
         TextColor3      = T.Text,
         TextSize        = 12,
         Font            = Enum.Font.GothamBold,
-        LetterSpacing   = 1,
     })
     TitleLabel.Parent = TitleBar
 
@@ -727,7 +726,6 @@ function NexusUI:CreateWindow(cfg)
                     TextSize        = 10,
                     Font            = Enum.Font.GothamBold,
                     TextXAlignment  = Enum.TextXAlignment.Left,
-                    LetterSpacing   = 2,
                 }).Parent = Header
                 -- Separator line
                 New("Frame", {
