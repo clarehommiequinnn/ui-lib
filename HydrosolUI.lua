@@ -33,7 +33,11 @@ local function mkImg(p, id, sz, col)
     local i=Instance.new("ImageLabel"); i.BackgroundTransparency=1
     i.Image=id; i.ImageColor3=col or Color3.fromRGB(140,138,168)
     i.Size=UDim2.new(0,sz or 16,0,sz or 16)
-    i.ScaleType=Enum.ScaleType.Fit; i.Parent=p; return i
+    i.ScaleType=Enum.ScaleType.Fit; i.Parent=p
+    i.ImageTransparency=0
+    -- Ensure icons render above underlying labels/buttons.
+    i.ZIndex=((p and p.ZIndex) or 0) + 2
+    return i
 end
 
 -- ── Theme (ImguiMenu-faithful) ────────────────────────
@@ -142,6 +146,16 @@ end
 
 -- ── Notifications ─────────────────────────────────────
 local NotifyHolder
+local _notifyStates={}
+local _notifyConn=nil
+
+local NOTIFY_W=290
+local NOTIFY_H=62
+local NOTIFY_PAD_X=20
+local NOTIFY_PAD_Y=20
+local NOTIFY_SPACING=20
+local NOTIFY_MIN_BG_T=0.06 -- at full alpha
+
 local function ensureNotify()
     if NotifyHolder and NotifyHolder.Parent then return end
     local sg=Instance.new("ScreenGui")
@@ -151,44 +165,114 @@ local function ensureNotify()
     if not sg.Parent then sg.Parent=Players.LocalPlayer:WaitForChild("PlayerGui") end
     NotifyHolder=Instance.new("Frame")
     NotifyHolder.Name="NH"; NotifyHolder.BackgroundTransparency=1
-    NotifyHolder.Size=UDim2.new(0,290,1,0)
-    NotifyHolder.Position=UDim2.new(1,-302,0,0)
+    NotifyHolder.Size=UDim2.new(0,NOTIFY_W,1,0)
+    -- x padding from the right, stacked from the top padding.
+    NotifyHolder.Position=UDim2.new(1,-(NOTIFY_W+NOTIFY_PAD_X),0,0)
     NotifyHolder.Parent=sg
-    local ul=Instance.new("UIListLayout"); ul.SortOrder=Enum.SortOrder.LayoutOrder
-    ul.VerticalAlignment=Enum.VerticalAlignment.Bottom; ul.Padding=UDim.new(0,6); ul.Parent=NotifyHolder
-    mkPad(NotifyHolder,0,0,12,0)
+
+    -- Animate notify like the ImguiMenu C++ version:
+    -- alpha easing (speed 4) + position easing (speed 8) + stacked target positions (spacing 20).
+    _notifyConn = RunService.RenderStepped:Connect(function(dt)
+        -- 1) Update alpha/timers
+        for i=#_notifyStates,1,-1 do
+            local st=_notifyStates[i]
+            if not st or not st.card or not st.card.Parent then
+                table.remove(_notifyStates,i)
+            else
+                st.timer=st.timer + dt
+                local targetAlpha = (st.timer < st.duration) and 1 or 0
+                local a=st.alpha
+                -- easing(speed=4)
+                local kAlpha = 1 - math.exp(-4*dt)
+                a = a + (targetAlpha - a) * kAlpha
+                st.alpha=a
+
+                -- visual update
+                local bgT = 1 - a*(1-NOTIFY_MIN_BG_T)
+                st.card.BackgroundTransparency = bgT
+                st.bar.BackgroundTransparency = 1 - a
+                st.ico.ImageTransparency = 1 - a
+                st.title.TextTransparency = 1 - a
+                st.msg.TextTransparency = 1 - a
+
+                local trackMinT = 0.65
+                st.progBg.BackgroundTransparency = 1 - a*(1-trackMinT)
+
+                local rem = 1 - (st.timer / st.duration)
+                if rem < 0 then rem = 0 end
+                st.prog.Size = UDim2.new(rem,0,0,2)
+                st.prog.BackgroundTransparency = 1 - a
+            end
+        end
+
+        -- 2) Compute target positions for visible notifications
+        local acc=0
+        for i=1,#_notifyStates do
+            local st=_notifyStates[i]
+            if st and st.card and st.card.Parent and st.alpha > 0.01 then
+                st._targetY = NOTIFY_PAD_Y + acc
+                acc = acc + (NOTIFY_H + NOTIFY_SPACING)
+            else
+                st._targetY = nil
+            end
+        end
+
+        -- 3) Ease position toward target positions
+        for i=1,#_notifyStates do
+            local st=_notifyStates[i]
+            if st and st.card and st.card.Parent and st._targetY then
+                local kPos = 1 - math.exp(-8*dt) -- easing(speed=8)
+                st.pos = st.pos + (st._targetY - st.pos) * kPos
+                st.card.Position = UDim2.new(0,0,0,st.pos)
+            end
+        end
+
+        -- 4) Destroy when faded out
+        for i=#_notifyStates,1,-1 do
+            local st=_notifyStates[i]
+            if st and st.card and st.card.Parent and st.timer >= st.duration and st.alpha < 0.01 then
+                st.card:Destroy()
+                table.remove(_notifyStates,i)
+            end
+        end
+    end)
 end
 
 local function Notify(opts)
     opts=opts or {}
     local nType=opts.Type or "info"
-    local dur=opts.Duration or 4
+    local dur=opts.Duration or 15 -- match ImguiMenu default (notify_time)
     ensureNotify()
     local col=({info=T.Accent,success=T.Success,warning=T.Warning,error=T.Error})[nType] or T.Accent
 
     local card=Instance.new("Frame")
-    card.Size=UDim2.new(1,0,0,62); card.BackgroundColor3=T.Notify
+    card.Size=UDim2.new(0,NOTIFY_W,0,NOTIFY_H); card.BackgroundColor3=T.Notify
     card.BackgroundTransparency=1; card.ClipsDescendants=true
-    card.Position=UDim2.new(1,20,0,0); card.Parent=NotifyHolder
+    card.Position=UDim2.new(0,0,0,NOTIFY_PAD_Y)
+    card.Parent=NotifyHolder
     mkCorner(card,8)
 
     -- left accent bar
-    local bar=Instance.new("Frame"); bar.Size=UDim2.new(0,3,1,0)
-    bar.BackgroundColor3=col; bar.BorderSizePixel=0; bar.Parent=card; mkCorner(bar,3)
+    local bar=Instance.new("Frame"); bar.Size=UDim2.new(0,3,0,NOTIFY_H)
+    bar.BackgroundColor3=col; bar.BorderSizePixel=0; bar.Parent=card; mkCorner(bar,100)
+    bar.BackgroundTransparency=1
 
     -- icon
     local ico=mkImg(card,({info=I.info,success=I.success,warning=I.warning,error=I.error})[nType] or I.info,16,col)
     ico.Position=UDim2.new(0,12,0.5,-8); ico.AnchorPoint=Vector2.new(0,0.5)
+    ico.ImageTransparency=1
 
     -- title
     local tl=mkLabel(card,opts.Title or "HydrosolUI",13,T.Text,Enum.Font.GothamBold)
     tl.Size=UDim2.new(1,-36,0,16); tl.Position=UDim2.new(0,34,0,10)
+    tl.TextTransparency=1
 
     -- message
     local ml=mkLabel(card,opts.Message or "",11,T.TextSub,Enum.Font.Gotham)
     ml.Size=UDim2.new(1,-36,0,22); ml.Position=UDim2.new(0,34,0,28); ml.TextWrapped=true
+    ml.TextTransparency=1
 
-    -- progress bar (rounded + clean fade)
+    -- progress bar (rounded)
     local progBg=Instance.new("Frame"); progBg.Size=UDim2.new(1,0,0,2)
     progBg.Position=UDim2.new(0,0,1,-2); progBg.BackgroundColor3=col; progBg.BorderSizePixel=0; progBg.Parent=card; mkCorner(progBg,1000)
     progBg.BackgroundTransparency=1
@@ -197,18 +281,20 @@ local function Notify(opts)
     prog.Position=UDim2.new(0,0,1,-2); prog.BackgroundColor3=col; prog.BorderSizePixel=0; prog.Parent=card; mkCorner(prog,1000)
     prog.BackgroundTransparency=1
 
-    ease(card,0.32,{BackgroundTransparency=0.06, Position=UDim2.new(0,0,0,0)})
-    -- fade progress together with the card for clean edges
-    ease(progBg,0.32,{BackgroundTransparency=0.65})
-    ease(prog,0.32,{BackgroundTransparency=0})
-
-    tw(prog,TweenInfo.new(dur,Enum.EasingStyle.Linear),{Size=UDim2.new(0,0,0,2)})
-    task.delay(dur,function()
-        ease(card,0.28,{BackgroundTransparency=1, Position=UDim2.new(1,20,0,0)})
-        ease(progBg,0.22,{BackgroundTransparency=1})
-        ease(prog,0.22,{BackgroundTransparency=1})
-        task.delay(0.32,function() card:Destroy() end)
-    end)
+    local st={
+        card=card,
+        bar=bar,
+        ico=ico,
+        title=tl,
+        msg=ml,
+        progBg=progBg,
+        prog=prog,
+        timer=0,
+        duration=dur,
+        alpha=0,
+        pos=NOTIFY_PAD_Y
+    }
+    table.insert(_notifyStates,st)
     return card
 end
 
@@ -259,7 +345,7 @@ function HydrosolUI:CreateWindow(opts)
     root.Name="Root"; root.AnchorPoint=Vector2.new(0.5,0.5)
     root.Position=UDim2.new(0.5,0,0.5,0); root.Size=wSize
     root.BackgroundColor3=T.Win; root.BorderSizePixel=0; root.ClipsDescendants=true
-    root.Parent=sg; mkCorner(root,8)
+    root.Parent=sg; mkCorner(root,4)
 
     -- ── Topbar ─────────────────────────────────────────
     local topbar=Instance.new("Frame")
@@ -269,7 +355,7 @@ function HydrosolUI:CreateWindow(opts)
     -- logo pill
     local logoBg=Instance.new("Frame"); logoBg.Size=UDim2.new(0,28,0,28)
     logoBg.Position=UDim2.new(0,14,0.5,-14); logoBg.BackgroundColor3=T.Accent
-    logoBg.BackgroundTransparency=0.75; logoBg.BorderSizePixel=0; logoBg.Parent=topbar; mkCorner(logoBg,7)
+    logoBg.BackgroundTransparency=0.75; logoBg.BorderSizePixel=0; logoBg.Parent=topbar; mkCorner(logoBg,4)
     local logoI=mkImg(logoBg,I.diamond,14,T.AccentHi); logoI.Position=UDim2.new(0.5,-7,0.5,-7)
 
     local titleLbl=mkLabel(topbar,title,13,T.Text,Enum.Font.GothamBold)
@@ -280,7 +366,7 @@ function HydrosolUI:CreateWindow(opts)
     local function wBtn(xOff,bgCol,icoId)
         local b=Instance.new("TextButton"); b.Size=UDim2.new(0,28,0,28)
         b.Position=UDim2.new(1,xOff,0.5,-14); b.BackgroundColor3=bgCol
-        b.BackgroundTransparency=0.6; b.Text=""; b.BorderSizePixel=0; b.Parent=topbar; mkCorner(b,6)
+        b.BackgroundTransparency=0.6; b.Text=""; b.BorderSizePixel=0; b.Parent=topbar; mkCorner(b,8)
         local ic=mkImg(b,icoId,13,T.TextInact); ic.AnchorPoint=Vector2.new(0.5,0.5); ic.Position=UDim2.new(0.5,0,0.5,0)
         b.MouseEnter:Connect(function() ease(b,0.12,{BackgroundTransparency=0.2}) end)
         b.MouseLeave:Connect(function() ease(b,0.12,{BackgroundTransparency=0.6}) end)
@@ -306,10 +392,13 @@ function HydrosolUI:CreateWindow(opts)
     end)
 
     -- drag
-    local dragging,dragStart,startPos=false,nil,nil
+    local dragging,dragStartMouse,startPos=false,nil,nil
     topbar.InputBegan:Connect(function(i)
         if i.UserInputType==Enum.UserInputType.MouseButton1 then
-            dragging=true; dragStart=i.Position; startPos=root.Position
+            dragging=true
+            -- Use absolute mouse coordinates to avoid UI scale/anchor warping.
+            dragStartMouse=UserInputService:GetMouseLocation()
+            startPos=root.Position
         end
     end)
     topbar.InputEnded:Connect(function(i)
@@ -317,9 +406,11 @@ function HydrosolUI:CreateWindow(opts)
     end)
     RunService.RenderStepped:Connect(function()
         if not dragging then return end
-        local d=UserInputService:GetMouseLocation()-Vector2.new(dragStart.X,dragStart.Y)
-        local np=UDim2.new(0,startPos.X.Offset+d.X,0,startPos.Y.Offset+d.Y)
-        root.Position=np
+        local m=UserInputService:GetMouseLocation()
+        local d=m-dragStartMouse
+        root.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+        -- Shadow follows root position.
+        local np=root.Position
         shadow.Position=UDim2.new(0,np.X.Offset+wSize.X.Offset/2,0,np.Y.Offset+wSize.Y.Offset/2+6)
     end)
 
@@ -386,7 +477,7 @@ function HydrosolUI:CreateWindow(opts)
         local tip=Instance.new("Frame"); tip.BackgroundColor3=T.WdgActive
         tip.Size=UDim2.new(0,0,0,26); tip.Position=UDim2.new(1,10,0.5,-13)
         tip.AutomaticSize=Enum.AutomaticSize.X; tip.Visible=false; tip.ZIndex=40; tip.Parent=slot
-        mkCorner(tip,6); mkPad(tip,0,10,0,10)
+        mkCorner(tip,4); mkPad(tip,0,10,0,10)
         local tipL=mkLabel(tip,tabTitle,11,T.Text,Enum.Font.GothamMedium)
         tipL.AutomaticSize=Enum.AutomaticSize.XY; tipL.Size=UDim2.new(0,0,0,26)
         tipL.TextYAlignment=Enum.TextYAlignment.Center; tipL.ZIndex=41
@@ -539,7 +630,7 @@ function HydrosolUI:CreateWindow(opts)
                 local btn=Instance.new("TextButton"); btn.Size=UDim2.new(0,68,0,26)
                 btn.Position=UDim2.new(1,-68,0.5,-13); btn.BackgroundColor3=T.Accent
                 btn.Text=o.BtnText or "Run"; btn.TextColor3=Color3.new(1,1,1)
-                btn.TextSize=11; btn.Font=Enum.Font.GothamBold; btn.BorderSizePixel=0; btn.Parent=row; mkCorner(btn,6)
+                btn.TextSize=11; btn.Font=Enum.Font.GothamBold; btn.BorderSizePixel=0; btn.Parent=row; mkCorner(btn,8)
                 btn.MouseEnter:Connect(function() ease(btn,0.1,{BackgroundColor3=T.AccentHi}) end)
                 btn.MouseLeave:Connect(function() ease(btn,0.1,{BackgroundColor3=T.Accent}) end)
                 btn.MouseButton1Click:Connect(function()
@@ -564,14 +655,14 @@ function HydrosolUI:CreateWindow(opts)
                 -- track
                 local track=Instance.new("Frame"); track.Size=UDim2.new(0,40,0,22)
                 track.Position=UDim2.new(1,-40,0.5,-11); track.BorderSizePixel=0
-                track.BackgroundColor3=T.WdgBg; track.Parent=row; mkCorner(track,11)
+                track.BackgroundColor3=T.WdgBg; track.Parent=row; mkCorner(track,100)
                 -- accent fill overlay
                 local fill=Instance.new("Frame"); fill.Size=state and UDim2.new(1,0,1,0) or UDim2.new(0,0,1,0)
-                fill.BackgroundColor3=T.Accent; fill.BorderSizePixel=0; fill.Parent=track; mkCorner(fill,11)
+                fill.BackgroundColor3=T.Accent; fill.BorderSizePixel=0; fill.Parent=track; mkCorner(fill,100)
 
                 local thumb=Instance.new("Frame"); thumb.Size=UDim2.new(0,16,0,16)
                 thumb.Position=state and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8)
-                thumb.BackgroundColor3=Color3.new(1,1,1); thumb.BorderSizePixel=0; thumb.Parent=track; mkCorner(thumb,8)
+                thumb.BackgroundColor3=Color3.new(1,1,1); thumb.BorderSizePixel=0; thumb.Parent=track; mkCorner(thumb,100)
                 thumb.ZIndex=fill.ZIndex+1
 
                 local ca=Instance.new("TextButton"); ca.Size=UDim2.new(1,0,1,0)
@@ -619,7 +710,7 @@ function HydrosolUI:CreateWindow(opts)
                 knob.AnchorPoint=Vector2.new(0.5,0.5)
                 knob.Position=UDim2.new((cur-minV)/(maxV-minV),0,0.5,0)
                 knob.BackgroundColor3=Color3.new(1,1,1); knob.BorderSizePixel=0
-                knob.ZIndex=tf.ZIndex+2; knob.Parent=tf; mkCorner(knob,7)
+                knob.ZIndex=tf.ZIndex+2; knob.Parent=tf; mkCorner(knob,100)
 
                 local draggingS=false; local Sld={Value=cur}
                 local function setS(v,silent)
@@ -680,7 +771,7 @@ function HydrosolUI:CreateWindow(opts)
                 panel.ClipsDescendants=true
 
                 local sRow=Instance.new("Frame"); sRow.Size=UDim2.new(1,-12,0,28); sRow.Position=UDim2.new(0,6,0,6)
-                sRow.BackgroundColor3=T.WdgBg; sRow.BorderSizePixel=0; sRow.ZIndex=81; sRow.Parent=panel; mkCorner(sRow,7)
+                sRow.BackgroundColor3=T.WdgBg; sRow.BorderSizePixel=0; sRow.ZIndex=81; sRow.Parent=panel; mkCorner(sRow,8)
                 local sIco=mkImg(sRow,I.search,12,T.TextInact); sIco.Position=UDim2.new(0,7,0.5,-6); sIco.ZIndex=82
                 local sBox=Instance.new("TextBox"); sBox.Size=UDim2.new(1,-28,1,0); sBox.Position=UDim2.new(0,26,0,0)
                 sBox.BackgroundTransparency=1; sBox.Text=""; sBox.PlaceholderText="Search..."
@@ -793,7 +884,7 @@ function HydrosolUI:CreateWindow(opts)
                 local kBtn=Instance.new("TextButton"); kBtn.Size=UDim2.new(0,78,0,26)
                 kBtn.Position=UDim2.new(1,-78,0.5,-13); kBtn.BackgroundColor3=T.WdgBg
                 kBtn.Text=key.Name; kBtn.TextColor3=T.Accent; kBtn.TextSize=11; kBtn.Font=Enum.Font.GothamBold
-                kBtn.BorderSizePixel=0; kBtn.Parent=row; mkCorner(kBtn,6); mkPad(kBtn,0,8,0,8)
+                kBtn.BorderSizePixel=0; kBtn.Parent=row; mkCorner(kBtn,4); mkPad(kBtn,0,8,0,8)
 
                 local kIco=mkImg(kBtn,I.keyboard,11,T.Accent); kIco.Position=UDim2.new(0,4,0.5,-5)
 
@@ -830,7 +921,7 @@ function HydrosolUI:CreateWindow(opts)
                 box.Position=UDim2.new(0.38,4,0.5,-14); box.BackgroundColor3=T.WdgBg
                 box.BorderSizePixel=0; box.Text=o.Default or ""; box.PlaceholderText=o.Placeholder or "..."
                 box.PlaceholderColor3=T.TextInact; box.TextColor3=T.Text; box.TextSize=11; box.Font=Enum.Font.Gotham
-                box.ClearTextOnFocus=o.ClearOnFocus~=false; box.Parent=row; mkCorner(box,8); mkPad(box,0,8,0,10)
+                box.ClearTextOnFocus=o.ClearOnFocus~=false; box.Parent=row; mkCorner(box,4); mkPad(box,0,8,0,10)
 
                 box.Focused:Connect(function() ease(box,0.12,{BackgroundColor3=T.WdgActive}) end)
                 box.FocusLost:Connect(function(enter)
