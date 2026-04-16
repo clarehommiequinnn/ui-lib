@@ -364,7 +364,7 @@ function HydrosolUI:CreateWindow(opts)
     shadow.Position=UDim2.new(0.5,0,0.5,6)
     shadow.Size=UDim2.new(0,wSize.X.Offset+40,0,wSize.Y.Offset+40)
     shadow.BackgroundTransparency=1; shadow.ClipsDescendants=true
-    mkCorner(shadow,4)
+    mkCorner(shadow,8)
     shadow.Parent=sg
 
     local shadowImg=Instance.new("ImageLabel")
@@ -376,6 +376,9 @@ function HydrosolUI:CreateWindow(opts)
     shadowImg.SliceCenter=Rect.new(49,49,450,450)
     shadowImg.Size=UDim2.new(1,0,1,0)
     shadowImg.Position=UDim2.new(0,0,0,0)
+    shadowImg.BackgroundTransparency=1
+    shadowImg.ClipsDescendants=true
+    mkCorner(shadowImg,8)
     shadowImg.Parent=shadow
 
     -- Root
@@ -383,7 +386,7 @@ function HydrosolUI:CreateWindow(opts)
     root.Name="Root"; root.AnchorPoint=Vector2.new(0.5,0.5)
     root.Position=UDim2.new(0.5,0,0.5,0); root.Size=wSize
     root.BackgroundColor3=T.Win; root.BorderSizePixel=0; root.ClipsDescendants=true
-    root.Parent=sg; mkCorner(root,4)
+    root.Parent=sg; mkCorner(root,8)
 
     -- ── Topbar ─────────────────────────────────────────
     local topbar=Instance.new("Frame")
@@ -393,7 +396,7 @@ function HydrosolUI:CreateWindow(opts)
     -- logo pill
     local logoBg=Instance.new("Frame"); logoBg.Size=UDim2.new(0,28,0,28)
     logoBg.Position=UDim2.new(0,14,0.5,-14); logoBg.BackgroundColor3=T.Accent
-    logoBg.BackgroundTransparency=0.75; logoBg.BorderSizePixel=0; logoBg.Parent=topbar; mkCorner(logoBg,4)
+    logoBg.BackgroundTransparency=0.75; logoBg.BorderSizePixel=0; logoBg.Parent=topbar; mkCorner(logoBg,8)
     local logoI=mkImg(logoBg,I.diamond,14,T.AccentHi); logoI.Position=UDim2.new(0.5,-7,0.5,-7)
 
     local titleLbl=mkLabel(topbar,title,13,T.Text,Enum.Font.GothamBold)
