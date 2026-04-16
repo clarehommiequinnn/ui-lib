@@ -11,6 +11,35 @@ local function tw(o, t, g) TweenService:Create(o, t, g):Play() end
 local function ease(o, d, g) tw(o, TweenInfo.new(d, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), g) end
 local function round(n, d) d=d or 0; local m=10^d; return math.floor(n*m+0.5)/m end
 
+local _iconCache={}
+local function resolveIconImage(id)
+    if type(id)~="string" then return id end
+    if not id:match("^https?://") then return id end
+    if _iconCache[id] then return _iconCache[id] end
+
+    -- Fallback: if ImageLabel can't load remote https image in your environment,
+    -- we fetch bytes and convert to data URI (base64).
+    local ok, body = pcall(function()
+        return game:HttpGet(id)
+    end)
+    if not ok or type(body)~="string" or body=="" then
+        _iconCache[id]=id
+        return id
+    end
+
+    local ok2, b64 = pcall(function()
+        return HttpService:Base64Encode(body)
+    end)
+    if not ok2 or type(b64)~="string" or b64=="" then
+        _iconCache[id]=id
+        return id
+    end
+
+    local dataUri = "data:image/png;base64,"..b64
+    _iconCache[id]=dataUri
+    return dataUri
+end
+
 local function mkCorner(p, r)
     local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 6); c.Parent=p; return c
 end
@@ -32,7 +61,7 @@ end
 local function mkImg(p, id, sz, col)
     local i=Instance.new("ImageLabel"); i.BackgroundTransparency=1
     if id then
-        i.Image=id
+        i.Image=resolveIconImage(id)
         i.ImageColor3=col or Color3.fromRGB(140,138,168)
         i.Visible=true
     else
