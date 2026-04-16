@@ -31,7 +31,16 @@ local function mkLabel(p, txt, sz, col, fnt, xa)
 end
 local function mkImg(p, id, sz, col)
     local i=Instance.new("ImageLabel"); i.BackgroundTransparency=1
-    i.Image=id; i.ImageColor3=col or Color3.fromRGB(140,138,168)
+    if id then
+        i.Image=id
+        i.ImageColor3=col or Color3.fromRGB(140,138,168)
+        i.Visible=true
+    else
+        -- No icon provided: keep object invisible to preserve layout safety.
+        i.Image=""
+        i.ImageColor3=col or Color3.fromRGB(140,138,168)
+        i.Visible=false
+    end
     i.Size=UDim2.new(0,sz or 16,0,sz or 16)
     i.ScaleType=Enum.ScaleType.Fit; i.Parent=p
     i.ImageTransparency=0
@@ -62,42 +71,10 @@ local T = {
     Notify     = Color3.fromRGB(20,  20,  27),
 }
 
--- ── Icons (Solar) ─────────────────────────────────────
-local I = {
-    close    = "rbxassetid://7072725342",
-    minus    = "rbxassetid://7072718362",
-    chevDown = "rbxassetid://7072706290",
-    check    = "rbxassetid://7072719338",
-    search   = "rbxassetid://7072706796",
-    keyboard = "rbxassetid://7072710953",
-    info     = "rbxassetid://7072709593",
-    warning  = "rbxassetid://7072725064",
-    success  = "rbxassetid://7072719338",
-    error    = "rbxassetid://7072725342",
-    eye      = "rbxassetid://7072706600",
-    shield   = "rbxassetid://7072714760",
-    sword    = "rbxassetid://7072714436",
-    bolt     = "rbxassetid://7072706054",
-    user     = "rbxassetid://7072720696",
-    save     = "rbxassetid://7072714120",
-    folder   = "rbxassetid://7072707994",
-    refresh  = "rbxassetid://7072713320",
-    lock     = "rbxassetid://7072711366",
-    layers   = "rbxassetid://7072710722",
-    sliders  = "rbxassetid://7072714334",
-    terminal = "rbxassetid://7072714966",
-    target   = "rbxassetid://7072714898",
-    fire     = "rbxassetid://7072707896",
-    diamond  = "rbxassetid://7072707022",
-    globe    = "rbxassetid://7072708327",
-    cursor   = "rbxassetid://7072706486",
-    settings = "rbxassetid://7072715066",
-    home     = "rbxassetid://7072709007",
-    star     = "rbxassetid://7072714574",
-    grid     = "rbxassetid://7072708534",
-    cpu      = "rbxassetid://7072706418",
-    chart    = "rbxassetid://7072706180",
-}
+-- Icons are optional.
+-- Your current environment can easily break asset rendering (assetid blocked/missing),
+-- so we keep the API but ship with an empty icon map.
+local I = {}
 
 -- ── SaveManager ───────────────────────────────────────
 local SaveManager = {}
@@ -332,13 +309,23 @@ function HydrosolUI:CreateWindow(opts)
     end)
 
     -- drop shadow
-    local shadow=Instance.new("ImageLabel"); shadow.AnchorPoint=Vector2.new(0.5,0.5)
+    local shadow=Instance.new("Frame"); shadow.AnchorPoint=Vector2.new(0.5,0.5)
     shadow.Position=UDim2.new(0.5,0,0.5,6)
     shadow.Size=UDim2.new(0,wSize.X.Offset+40,0,wSize.Y.Offset+40)
-    shadow.BackgroundTransparency=1; shadow.Image="rbxassetid://6014261993"
-    shadow.ImageColor3=Color3.new(0,0,0); shadow.ImageTransparency=0.5
-    shadow.ScaleType=Enum.ScaleType.Slice; shadow.SliceCenter=Rect.new(49,49,450,450)
+    shadow.BackgroundTransparency=1; shadow.ClipsDescendants=true
+    mkCorner(shadow,4)
     shadow.Parent=sg
+
+    local shadowImg=Instance.new("ImageLabel")
+    shadowImg.BackgroundTransparency=1
+    shadowImg.Image="rbxassetid://6014261993"
+    shadowImg.ImageColor3=Color3.new(0,0,0)
+    shadowImg.ImageTransparency=0.5
+    shadowImg.ScaleType=Enum.ScaleType.Slice
+    shadowImg.SliceCenter=Rect.new(49,49,450,450)
+    shadowImg.Size=UDim2.new(1,0,1,0)
+    shadowImg.Position=UDim2.new(0,0,0,0)
+    shadowImg.Parent=shadow
 
     -- Root
     local root=Instance.new("Frame")
@@ -363,22 +350,29 @@ function HydrosolUI:CreateWindow(opts)
     titleLbl.TextYAlignment=Enum.TextYAlignment.Center
 
     -- window buttons
-    local function wBtn(xOff,bgCol,icoId)
+    local function wBtn(xOff,bgCol,icoId,txt)
         local b=Instance.new("TextButton"); b.Size=UDim2.new(0,28,0,28)
         b.Position=UDim2.new(1,xOff,0.5,-14); b.BackgroundColor3=bgCol
         b.BackgroundTransparency=0.6; b.Text=""; b.BorderSizePixel=0; b.Parent=topbar; mkCorner(b,8)
+        if not icoId then
+            b.Text = txt or ""
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 14
+            b.TextColor3 = T.TextInact
+        end
+
         local ic=mkImg(b,icoId,13,T.TextInact); ic.AnchorPoint=Vector2.new(0.5,0.5); ic.Position=UDim2.new(0.5,0,0.5,0)
         b.MouseEnter:Connect(function() ease(b,0.12,{BackgroundTransparency=0.2}) end)
         b.MouseLeave:Connect(function() ease(b,0.12,{BackgroundTransparency=0.6}) end)
         return b,ic
     end
-    local closeBtn,closeIco=wBtn(-14,Color3.fromRGB(80,24,32),I.close)
+    local closeBtn,closeIco=wBtn(-14,Color3.fromRGB(80,24,32),I.close,"X")
     closeIco.ImageColor3=T.Error
-    local minBtn=wBtn(-50,T.WdgBg,I.minus)
+    local minBtn=wBtn(-50,T.WdgBg,I.minus,"-")
 
     closeBtn.MouseButton1Click:Connect(function()
         ease(root,0.28,{Size=UDim2.new(0,wSize.X.Offset,0,0),BackgroundTransparency=1})
-        ease(shadow,0.28,{ImageTransparency=1})
+        ease(shadowImg,0.28,{ImageTransparency=1})
         task.delay(0.32,function() sg:Destroy() end)
     end)
 
@@ -448,9 +442,9 @@ function HydrosolUI:CreateWindow(opts)
 
     -- entrance animation
     root.Size=UDim2.new(0,wSize.X.Offset,0,0); root.BackgroundTransparency=1
-    shadow.ImageTransparency=1
+    shadowImg.ImageTransparency=1
     ease(root,0.44,{Size=wSize,BackgroundTransparency=0})
-    ease(shadow,0.44,{ImageTransparency=0.5})
+    ease(shadowImg,0.44,{ImageTransparency=0.5})
 
     local Window={_tabs={},_activeTab=nil,_sg=sg,_sidebar=sidebar,_content=content,_root=root}
     Window.SaveManager=SaveManager.new(folder); Window.Notify=Notify
