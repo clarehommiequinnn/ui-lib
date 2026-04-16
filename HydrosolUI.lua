@@ -74,7 +74,58 @@ local T = {
 -- Icons are optional.
 -- Your current environment can easily break asset rendering (assetid blocked/missing),
 -- so we keep the API but ship with an empty icon map.
-local I = {}
+-- Icons via web API (Iconify) so we don't depend on Roblox asset ids.
+-- Notes:
+-- - Roblox ImageLabel can render `https://...png` directly.
+-- - We keep icons monochrome (white) and recolor them using `ImageColor3`.
+local I = (function()
+    local base="https://api.iconify.design"
+    local function url(provider, name)
+        -- Use png to avoid SVG parsing (Roblox ImageLabel doesn't support SVG).
+        return base.."/"..provider.."/"..name..".png?width=24&height=24&color=%23FFFFFF"
+    end
+    return {
+        -- window controls
+        close    = url("lucide","x"),
+        minus    = url("lucide","minus"),
+        chevDown = url("lucide","chevron-down"),
+        check    = url("lucide","check"),
+
+        search   = url("lucide","search"),
+        keyboard = url("lucide","keyboard"),
+        info     = url("lucide","info"),
+        warning  = url("lucide","alert-triangle"),
+
+        success  = url("lucide","check-circle"),
+        error    = url("lucide","x-circle"),
+
+        eye      = url("lucide","eye"),
+        shield   = url("lucide","shield"),
+
+        -- demo UI icons
+        sword    = url("lucide","sword"),
+        bolt     = url("lucide","bolt"),
+        user     = url("lucide","user"),
+        save     = url("lucide","save"),
+        folder   = url("lucide","folder"),
+        refresh  = url("lucide","refresh-cw"),
+        lock     = url("lucide","lock"),
+        layers   = url("lucide","layers"),
+        sliders  = url("lucide","sliders-horizontal"),
+        terminal = url("lucide","terminal"),
+        target   = url("lucide","target"),
+        fire     = url("lucide","fire"),
+        diamond  = url("lucide","gem"),
+        globe    = url("lucide","globe"),
+        cursor   = url("lucide","mouse-pointer"),
+        settings = url("lucide","settings"),
+        home     = url("lucide","home"),
+        star     = url("lucide","star"),
+        grid     = url("lucide","grid"),
+        cpu      = url("lucide","cpu"),
+        chart    = url("lucide","bar-chart-2"),
+    }
+end)()
 
 -- ── SaveManager ───────────────────────────────────────
 local SaveManager = {}
@@ -534,6 +585,9 @@ function HydrosolUI:CreateWindow(opts)
             sOpts=sOpts or {}
             local side=sOpts.Side or "auto"
             local col,order=(side=="auto") and self:_nextCol() or self:_col(side)
+            -- Guard against unexpected nils (prevents "nil cannot be converted to a number")
+            if not col then col=self._colL or self._colR end
+            order=tonumber(order) or 1
 
             -- section wrapper (no clip so content isn't cut)
             local wrap=Instance.new("Frame"); wrap.Name="SecWrap"
