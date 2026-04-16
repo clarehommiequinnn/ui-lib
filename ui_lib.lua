@@ -392,35 +392,37 @@ function HydrosolUI:CreateWindow(opts)
     local shadow=Instance.new("Frame"); shadow.AnchorPoint=Vector2.new(0.5,0.5)
     shadow.Position=UDim2.new(0.5,0,0.5,6)
     shadow.Size=UDim2.new(0,wSize.X.Offset+40,0,wSize.Y.Offset+40)
+    shadow.BackgroundColor3=Color3.new(0,0,0)
     shadow.BackgroundTransparency=1; shadow.ClipsDescendants=true
     mkCorner(shadow,8)
     shadow.Parent=sg
-
-    local shadowImg=Instance.new("ImageLabel")
-    shadowImg.BackgroundTransparency=1
-    shadowImg.Image="rbxassetid://6014261993"
-    shadowImg.ImageColor3=Color3.new(0,0,0)
-    shadowImg.ImageTransparency=0.5
-    shadowImg.ScaleType=Enum.ScaleType.Slice
-    shadowImg.SliceCenter=Rect.new(49,49,450,450)
-    shadowImg.Size=UDim2.new(1,0,1,0)
-    shadowImg.Position=UDim2.new(0,0,0,0)
-    shadowImg.BackgroundTransparency=1
-    shadowImg.ClipsDescendants=true
-    mkCorner(shadowImg,8)
-    shadowImg.Parent=shadow
 
     -- Root
     local root=Instance.new("Frame")
     root.Name="Root"; root.AnchorPoint=Vector2.new(0.5,0.5)
     root.Position=UDim2.new(0.5,0,0.5,0); root.Size=wSize
-    root.BackgroundColor3=T.Win; root.BorderSizePixel=0; root.ClipsDescendants=true
-    root.Parent=sg; mkCorner(root,8)
+    -- Use an inner rounded clip to avoid square edges from child layers.
+    root.BackgroundTransparency=1
+    root.BorderSizePixel=0; root.ClipsDescendants=false
+    root.Parent=sg
+
+    local rootClip=Instance.new("Frame")
+    rootClip.Name="Clip"
+    rootClip.Size=UDim2.new(1,0,1,0)
+    rootClip.Position=UDim2.new(0,0,0,0)
+    rootClip.BackgroundColor3=T.Win
+    rootClip.BackgroundTransparency=1
+    rootClip.BorderSizePixel=0
+    rootClip.ClipsDescendants=true
+    rootClip.Parent=root
+    mkCorner(rootClip,8)
 
     -- ── Topbar ─────────────────────────────────────────
     local topbar=Instance.new("Frame")
     topbar.Name="TopBar"; topbar.Size=UDim2.new(1,0,0,48)
-    topbar.BackgroundColor3=T.Bar; topbar.BorderSizePixel=0; topbar.Parent=root
+    topbar.BackgroundColor3=T.Bar; topbar.BorderSizePixel=0; topbar.Parent=rootClip
+    topbar.ClipsDescendants=true
+    mkCorner(topbar,8)
 
     -- logo pill
     local logoBg=Instance.new("Frame"); logoBg.Size=UDim2.new(0,28,0,28)
@@ -454,8 +456,9 @@ function HydrosolUI:CreateWindow(opts)
     local minBtn=wBtn(-50,T.WdgBg,I.minus,"-")
 
     closeBtn.MouseButton1Click:Connect(function()
-        ease(root,0.28,{Size=UDim2.new(0,wSize.X.Offset,0,0),BackgroundTransparency=1})
-        ease(shadowImg,0.28,{ImageTransparency=1})
+        ease(root,0.28,{Size=UDim2.new(0,wSize.X.Offset,0,0)})
+        ease(rootClip,0.20,{BackgroundTransparency=1})
+        ease(shadow,0.28,{BackgroundTransparency=1})
         task.delay(0.32,function() sg:Destroy() end)
     end)
 
@@ -506,7 +509,9 @@ function HydrosolUI:CreateWindow(opts)
     local sidebar=Instance.new("Frame")
     sidebar.Name="Sidebar"; sidebar.Size=UDim2.new(0,55,1,-48)
     sidebar.Position=UDim2.new(0,0,0,48); sidebar.BackgroundColor3=T.Bar
-    sidebar.BorderSizePixel=0; sidebar.Parent=root
+    sidebar.BorderSizePixel=0; sidebar.Parent=rootClip
+    sidebar.ClipsDescendants=true
+    mkCorner(sidebar,8)
 
     local sideList=Instance.new("UIListLayout"); sideList.SortOrder=Enum.SortOrder.LayoutOrder
     sideList.HorizontalAlignment=Enum.HorizontalAlignment.Center
@@ -515,19 +520,20 @@ function HydrosolUI:CreateWindow(opts)
 
     -- sidebar right divider
     local sdiv=Instance.new("Frame"); sdiv.Size=UDim2.new(0,1,1,-48); sdiv.Position=UDim2.new(0,55,0,48)
-    sdiv.BackgroundColor3=T.Line; sdiv.BackgroundTransparency=0.4; sdiv.BorderSizePixel=0; sdiv.Parent=root
+    sdiv.BackgroundColor3=T.Line; sdiv.BackgroundTransparency=0.4; sdiv.BorderSizePixel=0; sdiv.Parent=rootClip
 
     -- ── Content ────────────────────────────────────────
     local content=Instance.new("Frame")
     content.Name="Content"; content.Size=UDim2.new(1,-56,1,-48)
     content.Position=UDim2.new(0,56,0,48); content.BackgroundTransparency=1
-    content.ClipsDescendants=true; content.Parent=root
+    content.ClipsDescendants=true; content.Parent=rootClip
 
     -- entrance animation
-    root.Size=UDim2.new(0,wSize.X.Offset,0,0); root.BackgroundTransparency=1
-    shadowImg.ImageTransparency=1
-    ease(root,0.44,{Size=wSize,BackgroundTransparency=0})
-    ease(shadowImg,0.44,{ImageTransparency=0.5})
+    root.Size=UDim2.new(0,wSize.X.Offset,0,0)
+    rootClip.BackgroundTransparency=1
+    ease(root,0.44,{Size=wSize})
+    ease(rootClip,0.44,{BackgroundTransparency=0})
+    ease(shadow,0.44,{BackgroundTransparency=0.65})
 
     local Window={_tabs={},_activeTab=nil,_sg=sg,_sidebar=sidebar,_content=content,_root=root}
     Window.SaveManager=SaveManager.new(folder); Window.Notify=Notify
